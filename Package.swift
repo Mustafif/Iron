@@ -9,7 +9,6 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
             name: "Iron",
             targets: ["Iron"]
@@ -19,21 +18,20 @@ let package = Package(
             targets: ["IronApp"]
         ),
     ],
+    dependencies: [
+        // No external dependencies - using only system frameworks
+    ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "Iron"
+            name: "Iron",
+            dependencies: [],
+            resources: [
+                .process("UI/Metal/Shaders.metal")
+            ]
         ),
         .executableTarget(
             name: "IronApp",
-            dependencies: ["Iron"],
-            linkerSettings: [
-                .linkedFramework("SwiftUI"),
-                .linkedFramework("Metal"),
-                .linkedFramework("MetalKit"),
-                .linkedFramework("AppKit"),
-            ]
+            dependencies: ["Iron"]
         ),
         .testTarget(
             name: "IronTests",

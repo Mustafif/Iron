@@ -66,6 +66,9 @@ struct SidebarView: View {
             ThemeSelector()
                 .environmentObject(themeManager)
         }
+        .onChange(of: navigationModel.searchText) { _, newValue in
+            searchText = newValue
+        }
 
     }
 
@@ -132,12 +135,8 @@ struct SidebarView: View {
                 .foregroundColor(themeManager.currentTheme.colors.foreground)
                 .textFieldStyle(.plain)
                 .onChange(of: searchText) { _, newValue in
+                    navigationModel.searchText = newValue
                     navigationModel.search(newValue)
-                    if !newValue.isEmpty {
-                        Task {
-                            await navigationModel.performSearch(with: ironApp)
-                        }
-                    }
                 }
 
             if !searchText.isEmpty {
@@ -316,9 +315,38 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 20)
 
-            // Beautiful interactive file tree
+            // Beautiful interactive file tree or search results
             LazyVStack(spacing: 2) {
-                if ironApp.folderManager.rootFolders.isEmpty {
+                if navigationModel.isSearching || !navigationModel.searchResults.isEmpty {
+                    // Show search results
+                    if navigationModel.isSearching {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                            Text("Searching...")
+                                .font(.caption)
+                                .foregroundColor(
+                                    themeManager.currentTheme.colors.foregroundSecondary)
+                        }
+                        .padding(.vertical, 8)
+                    } else if navigationModel.searchResults.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 24))
+                                .foregroundColor(
+                                    themeManager.currentTheme.colors.foregroundTertiary)
+                            Text("No results found")
+                                .font(.caption)
+                                .foregroundColor(
+                                    themeManager.currentTheme.colors.foregroundSecondary)
+                        }
+                        .padding(.vertical, 16)
+                    } else {
+                        ForEach(navigationModel.searchResults, id: \.id) { result in
+                            SearchResultRow(result: result)
+                        }
+                    }
+                } else if ironApp.folderManager.rootFolders.isEmpty {
                     EmptyFoldersView()
                 } else {
                     ForEach(Array(ironApp.folderManager.rootFolders.enumerated()), id: \.1.id) {
@@ -559,7 +587,10 @@ struct EnhancedFileTreeRow: View {
                         .fill(
                             LinearGradient(
                                 colors: navigationModel.selectedFolder?.id == folder.id
-                                    ? [Color.blue.opacity(0.8), Color.blue]
+                                    ? [
+                                        themeManager.currentTheme.colors.accent.opacity(0.9),
+                                        themeManager.currentTheme.colors.accent,
+                                    ]
                                     : [Color.orange.opacity(0.8), Color.orange],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -568,9 +599,11 @@ struct EnhancedFileTreeRow: View {
                         .frame(width: 20, height: 16)
                         .shadow(
                             color: navigationModel.selectedFolder?.id == folder.id
-                                ? Color.blue.opacity(0.4)
+                                ? themeManager.currentTheme.colors.accent.opacity(0.4)
                                 : Color.orange.opacity(0.3),
-                            radius: 2
+                            radius: navigationModel.selectedFolder?.id == folder.id ? 3 : 2,
+                            x: 0,
+                            y: 1
                         )
 
                     Image(systemName: isExpanded ? "folder.fill" : "folder")
@@ -578,22 +611,35 @@ struct EnhancedFileTreeRow: View {
                         .foregroundColor(.white)
                 }
                 .padding(.trailing, 8)
+                .scaleEffect(navigationModel.selectedFolder?.id == folder.id ? 1.05 : 1.0)
+                .animation(
+                    .easeInOut(duration: 0.15),
+                    value: navigationModel.selectedFolder?.id == folder.id)
 
                 // Enhanced folder name
                 Text(folder.name)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(
+                        .system(
+                            size: 14,
+                            weight: navigationModel.selectedFolder?.id == folder.id
+                                ? .bold : .semibold,
+                            design: .rounded)
+                    )
                     .foregroundColor(
                         navigationModel.selectedFolder?.id == folder.id
-                            ? Color.blue
+                            ? themeManager.currentTheme.colors.accent
                             : themeManager.currentTheme.colors.foreground
                     )
                     .lineLimit(1)
                     .shadow(
                         color: navigationModel.selectedFolder?.id == folder.id
-                            ? Color.blue.opacity(0.3)
+                            ? themeManager.currentTheme.colors.accent.opacity(0.3)
                             : Color.clear,
                         radius: 1
                     )
+                    .animation(
+                        .easeInOut(duration: 0.15),
+                        value: navigationModel.selectedFolder?.id == folder.id)
 
                 Spacer()
 
@@ -630,8 +676,8 @@ struct EnhancedFileTreeRow: View {
                         navigationModel.selectedFolder?.id == folder.id
                             ? LinearGradient(
                                 colors: [
-                                    Color.blue.opacity(0.15),
-                                    Color.blue.opacity(0.05),
+                                    themeManager.currentTheme.colors.accent.opacity(0.15),
+                                    themeManager.currentTheme.colors.accent.opacity(0.05),
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -652,9 +698,17 @@ struct EnhancedFileTreeRow: View {
                     )
                     .stroke(
                         navigationModel.selectedFolder?.id == folder.id
-                            ? Color.blue.opacity(0.3)
+                            ? themeManager.currentTheme.colors.accent.opacity(0.3)
                             : Color.clear,
                         lineWidth: 1
+                    )
+                    .shadow(
+                        color: navigationModel.selectedFolder?.id == folder.id
+                            ? themeManager.currentTheme.colors.accent.opacity(0.2)
+                            : Color.clear,
+                        radius: navigationModel.selectedFolder?.id == folder.id ? 4 : 0,
+                        x: 0,
+                        y: 2
                     )
             )
             .contentShape(Rectangle())
@@ -662,7 +716,9 @@ struct EnhancedFileTreeRow: View {
                 navigationModel.selectFolder(folder, ironApp: ironApp)
             }
             .onHover { hovering in
-                hoveredItem = hovering ? folder.id.uuidString : nil
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    hoveredItem = hovering ? folder.id.uuidString : nil
+                }
             }
             .contextMenu {
                 Button {
@@ -789,12 +845,20 @@ struct EnhancedFileTreeNoteRow: View {
 
             // Beautiful note icon
             ZStack {
-                RoundedRectangle(cornerRadius: 3)
+                RoundedRectangle(cornerRadius: 4)
                     .fill(
                         LinearGradient(
                             colors: navigationModel.selectedNote?.id == note.id
-                                ? [Color.blue.opacity(0.8), Color.blue]
-                                : [Color.gray.opacity(0.6), Color.gray.opacity(0.8)],
+                                ? [
+                                    themeManager.currentTheme.colors.accent.opacity(0.9),
+                                    themeManager.currentTheme.colors.accent,
+                                ]
+                                : [
+                                    themeManager.currentTheme.colors.foregroundTertiary.opacity(
+                                        0.6),
+                                    themeManager.currentTheme.colors.foregroundTertiary.opacity(
+                                        0.8),
+                                ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -802,9 +866,11 @@ struct EnhancedFileTreeNoteRow: View {
                     .frame(width: 16, height: 18)
                     .shadow(
                         color: navigationModel.selectedNote?.id == note.id
-                            ? Color.blue.opacity(0.3)
-                            : Color.gray.opacity(0.2),
-                        radius: 1
+                            ? themeManager.currentTheme.colors.accent.opacity(0.4)
+                            : Color.clear,
+                        radius: navigationModel.selectedNote?.id == note.id ? 3 : 0,
+                        x: 0,
+                        y: 1
                     )
 
                 Image(systemName: "doc.text")
@@ -812,34 +878,70 @@ struct EnhancedFileTreeNoteRow: View {
                     .foregroundColor(.white)
             }
             .padding(.trailing, 8)
+            .scaleEffect(navigationModel.selectedNote?.id == note.id ? 1.05 : 1.0)
+            .animation(
+                .easeInOut(duration: 0.15), value: navigationModel.selectedNote?.id == note.id)
 
             // Enhanced note name
             Text(note.title)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(
+                    .system(
+                        size: 12,
+                        weight: navigationModel.selectedNote?.id == note.id ? .semibold : .medium,
+                        design: .rounded)
+                )
                 .foregroundColor(
                     navigationModel.selectedNote?.id == note.id
-                        ? Color.blue
+                        ? themeManager.currentTheme.colors.accent
                         : themeManager.currentTheme.colors.foreground
                 )
                 .lineLimit(1)
+                .animation(
+                    .easeInOut(duration: 0.15), value: navigationModel.selectedNote?.id == note.id)
 
             Spacer()
         }
         .frame(height: 24)
         .contentShape(Rectangle())
         .background(
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: 6)
                 .fill(
                     navigationModel.selectedNote?.id == note.id
                         ? LinearGradient(
                             colors: [
-                                Color.blue.opacity(0.1),
-                                Color.blue.opacity(0.05),
+                                themeManager.currentTheme.colors.accent.opacity(0.15),
+                                themeManager.currentTheme.colors.accent.opacity(0.08),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
-                        : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom)
+                        : (hoveredItem == note.id.uuidString
+                            ? LinearGradient(
+                                colors: [
+                                    themeManager.currentTheme.colors.backgroundSecondary.opacity(
+                                        0.8),
+                                    themeManager.currentTheme.colors.backgroundSecondary.opacity(
+                                        0.4),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            : LinearGradient(
+                                colors: [Color.clear], startPoint: .top, endPoint: .bottom))
+                )
+                .stroke(
+                    navigationModel.selectedNote?.id == note.id
+                        ? themeManager.currentTheme.colors.accent.opacity(0.3)
+                        : Color.clear,
+                    lineWidth: navigationModel.selectedNote?.id == note.id ? 1 : 0
+                )
+                .shadow(
+                    color: navigationModel.selectedNote?.id == note.id
+                        ? themeManager.currentTheme.colors.accent.opacity(0.2)
+                        : Color.clear,
+                    radius: navigationModel.selectedNote?.id == note.id ? 4 : 0,
+                    x: 0,
+                    y: 2
                 )
         )
         .contentShape(Rectangle())
@@ -847,7 +949,9 @@ struct EnhancedFileTreeNoteRow: View {
             navigationModel.selectNote(note, ironApp: ironApp)
         }
         .onHover { hovering in
-            hoveredItem = hovering ? note.id.uuidString : nil
+            withAnimation(.easeInOut(duration: 0.15)) {
+                hoveredItem = hovering ? note.id.uuidString : nil
+            }
         }
         .contextMenu {
             Button {
@@ -877,6 +981,165 @@ struct EnhancedFileTreeNoteRow: View {
             }
         }
 
+    }
+}
+
+// MARK: - Search Result Row
+
+struct SearchResultRow: View {
+    @EnvironmentObject var ironApp: IronApp
+    @EnvironmentObject var navigationModel: NavigationModel
+    @EnvironmentObject var themeManager: ThemeManager
+
+    let result: SearchResult
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Note icon with selection highlighting
+            ZStack {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(
+                        LinearGradient(
+                            colors: navigationModel.selectedNote?.id == result.noteId
+                                ? [
+                                    themeManager.currentTheme.colors.accent.opacity(0.9),
+                                    themeManager.currentTheme.colors.accent,
+                                ]
+                                : [
+                                    themeManager.currentTheme.colors.foregroundTertiary.opacity(
+                                        0.6),
+                                    themeManager.currentTheme.colors.foregroundTertiary.opacity(
+                                        0.8),
+                                ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 16, height: 18)
+                    .shadow(
+                        color: navigationModel.selectedNote?.id == result.noteId
+                            ? themeManager.currentTheme.colors.accent.opacity(0.4)
+                            : Color.clear,
+                        radius: navigationModel.selectedNote?.id == result.noteId ? 3 : 0,
+                        x: 0,
+                        y: 1
+                    )
+
+                Image(systemName: "doc.text")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .scaleEffect(navigationModel.selectedNote?.id == result.noteId ? 1.05 : 1.0)
+            .animation(
+                .easeInOut(duration: 0.15), value: navigationModel.selectedNote?.id == result.noteId
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                // Note title with selection highlighting
+                Text(result.title)
+                    .font(
+                        .system(
+                            size: 12,
+                            weight: navigationModel.selectedNote?.id == result.noteId
+                                ? .semibold : .medium,
+                            design: .rounded
+                        )
+                    )
+                    .foregroundColor(
+                        navigationModel.selectedNote?.id == result.noteId
+                            ? themeManager.currentTheme.colors.accent
+                            : themeManager.currentTheme.colors.foreground
+                    )
+                    .lineLimit(1)
+                    .animation(
+                        .easeInOut(duration: 0.15),
+                        value: navigationModel.selectedNote?.id == result.noteId)
+
+                // Snippet
+                if !result.snippet.isEmpty {
+                    Text(result.snippet)
+                        .font(.system(size: 10))
+                        .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
+                        .lineLimit(2)
+                }
+
+                // Match type and score
+                HStack(spacing: 4) {
+                    Text(result.matchType.rawValue.capitalized)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(themeManager.currentTheme.colors.accent)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            Capsule()
+                                .fill(themeManager.currentTheme.colors.accent.opacity(0.1))
+                        )
+
+                    Spacer()
+
+                    Text("\(Int(result.relevanceScore * 100))%")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(
+                    navigationModel.selectedNote?.id == result.noteId
+                        ? LinearGradient(
+                            colors: [
+                                themeManager.currentTheme.colors.accent.opacity(0.15),
+                                themeManager.currentTheme.colors.accent.opacity(0.08),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        : (isHovered
+                            ? LinearGradient(
+                                colors: [
+                                    themeManager.currentTheme.colors.backgroundSecondary.opacity(
+                                        0.8),
+                                    themeManager.currentTheme.colors.backgroundSecondary.opacity(
+                                        0.4),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            : LinearGradient(
+                                colors: [Color.clear], startPoint: .top, endPoint: .bottom))
+                )
+                .stroke(
+                    navigationModel.selectedNote?.id == result.noteId
+                        ? themeManager.currentTheme.colors.accent.opacity(0.3)
+                        : Color.clear,
+                    lineWidth: navigationModel.selectedNote?.id == result.noteId ? 1 : 0
+                )
+                .shadow(
+                    color: navigationModel.selectedNote?.id == result.noteId
+                        ? themeManager.currentTheme.colors.accent.opacity(0.2)
+                        : Color.clear,
+                    radius: navigationModel.selectedNote?.id == result.noteId ? 4 : 0,
+                    x: 0,
+                    y: 2
+                )
+        )
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+        .onTapGesture {
+            // Find the note and select it
+            if let note = ironApp.notes.first(where: { $0.id == result.noteId }) {
+                navigationModel.selectNote(note, ironApp: ironApp)
+            }
+        }
     }
 }
 

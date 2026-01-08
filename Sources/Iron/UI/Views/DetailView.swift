@@ -216,7 +216,7 @@ struct DetailView: View {
 
             Spacer()
 
-            // Stats
+            // Stats including FPS counter
             HStack(spacing: 16) {
                 HStack(spacing: 4) {
                     Image(systemName: "textformat")
@@ -238,6 +238,9 @@ struct DetailView: View {
                     Text("\(lineCount(editingText)) lines")
                         .font(.system(size: 10))
                 }
+
+                // FPS Counter
+                FPSCounterView()
             }
             .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
         }
@@ -617,6 +620,69 @@ struct ExportOption: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - FPS Counter View
+
+private struct FPSCounterView: View {
+    @StateObject private var monitor = PerformanceMonitor.shared
+    @EnvironmentObject var themeManager: ThemeManager
+    @State private var isVisible = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isVisible {
+                        monitor.stopMonitoring()
+                    } else {
+                        monitor.startMonitoring()
+                    }
+                    isVisible.toggle()
+                }
+            } label: {
+                Image(systemName: isVisible ? "speedometer.fill" : "speedometer")
+                    .font(.system(size: 9))
+                    .foregroundColor(
+                        isVisible
+                            ? themeManager.currentTheme.colors.accent
+                            : themeManager.currentTheme.colors.foregroundTertiary
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Toggle FPS Counter")
+
+            if isVisible {
+                Text("\(Int(monitor.fps)) fps")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(fpsColor)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
+        }
+        .onAppear {
+            // Start frame recording when view appears
+            startFrameRecording()
+        }
+    }
+
+    private var fpsColor: Color {
+        if monitor.fps >= 58 {
+            return .green
+        } else if monitor.fps >= 30 {
+            return .yellow
+        } else {
+            return .red
+        }
+    }
+
+    private func startFrameRecording() {
+        // Use a timer to simulate frame recording
+        Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { _ in
+            Task { @MainActor in
+                monitor.recordFrame()
+            }
+        }
     }
 }
 

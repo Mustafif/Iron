@@ -77,6 +77,11 @@ public class NavigationModel: ObservableObject {
     /// Folder being renamed
     @Published public var folderForAction: Folder?
 
+    // MARK: - App Reference
+
+    /// Reference to the main IronApp instance
+    public weak var ironApp: IronApp?
+
     /// Current working directory
     @Published public var currentWorkingDirectory: URL?
 
@@ -140,7 +145,8 @@ public class NavigationModel: ObservableObject {
         searchDebouncer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) {
             [weak self] _ in
             Task { @MainActor in
-                await self?.performSearchInternal()
+                guard let self = self, let ironApp = self.ironApp else { return }
+                await self.performSearch(with: ironApp)
             }
         }
     }
@@ -333,12 +339,12 @@ public class NavigationModel: ObservableObject {
 
     private func performSearchInternal() async {
         guard !searchText.isEmpty else { return }
+        guard let ironApp = ironApp else {
+            searchResults = []
+            return
+        }
 
-        isSearching = true
-
-        // This will be implemented when we integrate with IronApp
-        // For now, just set empty results
-        searchResults = []
+        await performSearch(with: ironApp)
     }
 
     /// Performs search using IronApp

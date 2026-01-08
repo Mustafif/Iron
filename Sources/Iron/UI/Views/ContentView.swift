@@ -23,6 +23,7 @@ public struct ContentView: View {
         .themedBackground(themeManager)
         .preferredColorScheme(themeManager.currentTheme.isDark ? .dark : .light)
         .onAppear {
+            navigationModel.ironApp = ironApp
             Task {
                 await initializeApp()
             }

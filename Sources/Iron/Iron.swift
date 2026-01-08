@@ -78,7 +78,9 @@ public class IronApp: ObservableObject {
     // MARK: - Note Management
 
     /// Creates a new note
-    public func createNote(title: String, content: String = "") async throws -> Note {
+    public func createNote(title: String, content: String = "", in folder: Folder? = nil)
+        async throws -> Note
+    {
         guard isInitialized else {
             throw IronError.vaultNotFound("No vault initialized")
         }
@@ -87,7 +89,7 @@ public class IronApp: ObservableObject {
             let note = try await folderManager.createNote(
                 name: title,
                 content: content.isEmpty ? "# \(title)\n\n" : content,
-                folder: folderManager.selectedFolder
+                folder: folder
             )
 
             // Add to search index
@@ -190,6 +192,57 @@ public class IronApp: ObservableObject {
     /// Deletes a note
     public func deleteNote(_ note: Note) async throws {
         try await deleteNote(id: note.id)
+    }
+
+    /// Renames a note
+    public func renameNote(_ note: Note, to newName: String) async throws {
+        guard fileStorage != nil else {
+            throw IronError.vaultNotFound("No vault initialized")
+        }
+
+        guard let sourceURL = note.url else {
+            throw IronError.fileSystem(.invalidPath("Note has no URL"))
+        }
+
+        let targetURL = sourceURL.deletingLastPathComponent()
+            .appendingPathComponent("\(newName).md")
+
+        // Rename the file
+        try FileManager.default.moveItem(at: sourceURL, to: targetURL)
+
+        // Update note content to reflect new title if it contains the old title
+        var updatedContent = note.content
+        if updatedContent.hasPrefix("# \(note.title)") {
+            updatedContent = updatedContent.replacingOccurrences(
+                of: "# \(note.title)",
+                with: "# \(newName)",
+                options: [.anchored]
+            )
+            try updatedContent.write(to: targetURL, atomically: true, encoding: .utf8)
+        }
+
+        // Refresh notes
+        await loadNotes()
+    }
+
+    /// Moves a note to a different folder
+    public func moveNote(_ note: Note, to folder: Folder?) async throws {
+        guard fileStorage != nil else {
+            throw IronError.vaultNotFound("No vault initialized")
+        }
+
+        guard let sourceURL = note.url else {
+            throw IronError.fileSystem(.invalidPath("Note has no URL"))
+        }
+
+        let targetFolder = folder ?? folderManager.rootFolder
+        let targetURL = targetFolder.url.appendingPathComponent(sourceURL.lastPathComponent)
+
+        // Move the file
+        try FileManager.default.moveItem(at: sourceURL, to: targetURL)
+
+        // Refresh notes
+        await loadNotes()
     }
 
     // MARK: - Search

@@ -60,6 +60,7 @@ public struct Folder: Identifiable, Codable, Hashable, Sendable {
         }
         return parentFolder.depth(in: folderManager) + 1
     }
+
 }
 
 /// Additional metadata for folders
@@ -108,12 +109,22 @@ public class FolderManager: ObservableObject {
         return _rootFolder ?? rootFolders.first ?? Folder(name: "Root", path: "/")
     }
 
+    /// Returns all folders sorted alphabetically
+    public var allFolders: [Folder] {
+        return Array(folders.values).sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
     public init() {}
 
     /// Sets the root folder for the manager
     public func setRootFolder(path: String) {
         _rootFolder = Folder(name: "Notes", path: path)
         addFolder(_rootFolder!)
+
+        // Discover existing subdirectories as folders
+        discoverFoldersFromFilesystem()
     }
 
     /// Adds a folder to the manager
@@ -133,15 +144,18 @@ public class FolderManager: ObservableObject {
         return folders[id]
     }
 
-    /// Gets all root folders (folders with no parent)
+    /// Gets all root folders (folders with no parent) sorted alphabetically
     public var rootFolders: [Folder] {
-        return folders.values.filter { $0.isRoot }
+        return folders.values.filter { $0.isRoot }.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
     }
 
-    /// Gets child folders for a given parent folder
+    /// Gets child folders for a given parent folder sorted alphabetically
     public func childFolders(of parentId: UUID) -> [Folder] {
-        guard let childIds = folderHierarchy[parentId] else { return [] }
-        return childIds.compactMap { folders[$0] }
+        return folders.values.filter { $0.parentId == parentId }.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
     }
 
     /// Gets all child folders recursively
@@ -211,6 +225,27 @@ public class FolderManager: ObservableObject {
         updateHierarchy()
     }
 
+    /// Renames a folder
+    public func renameFolder(_ folderId: UUID, to newName: String) throws {
+        guard var folder = folders[folderId] else {
+            throw FolderError.folderNotFound
+        }
+
+        // Update folder name and path
+        let oldURL = folder.url
+        let newURL = oldURL.deletingLastPathComponent().appendingPathComponent(newName)
+
+        // Rename directory on disk if it exists
+        if FileManager.default.fileExists(atPath: oldURL.path) {
+            try FileManager.default.moveItem(at: oldURL, to: newURL)
+        }
+
+        folder.name = newName
+        folder.path = newURL.path
+        folder.updateModifiedTime()
+        folders[folderId] = folder
+    }
+
     /// Checks if moving a folder would create a circular reference
     private func wouldCreateCircularReference(
         moving folderId: UUID,
@@ -237,6 +272,25 @@ public class FolderManager: ObservableObject {
         }
 
         return folder.name
+    }
+
+    /// Selects a folder as the current active folder
+    public func selectFolder(_ folder: Folder) {
+        selectedFolder = folder
+    }
+
+    /// Selects a folder by ID as the current active folder
+    public func selectFolder(withId folderId: UUID) {
+        if let folder = folders[folderId] {
+            selectedFolder = folder
+        }
+    }
+
+    public func folder(for note: Note) -> Folder? {
+        let noteURL = URL(fileURLWithPath: note.filePath)
+        let noteDirectoryURL = noteURL.deletingLastPathComponent()
+
+        return folders.values.first { $0.url == noteDirectoryURL }
     }
 }
 
@@ -349,6 +403,9 @@ extension FolderManager {
         // Clear existing notes
         notes.removeAll()
 
+        // Rediscover folders first
+        discoverFoldersFromFilesystem()
+
         // Recursively find all .md files
         if let enumerator = fileManager.enumerator(
             at: rootURL,
@@ -361,6 +418,9 @@ extension FolderManager {
                 }
             }
         }
+
+        // Sort notes alphabetically
+        notes.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
 
     /// Loads a single note from a file
@@ -394,6 +454,68 @@ extension FolderManager {
             updatedNote.content = content
             updatedNote.modifiedAt = Date()
             notes[index] = updatedNote
+        }
+    }
+
+    /// Discovers folders from the filesystem
+    private func discoverFoldersFromFilesystem() {
+        guard let rootPath = _rootFolder?.path else {
+            return
+        }
+
+        let rootURL = URL(fileURLWithPath: rootPath)
+
+        // Keep only the root folder, clear others
+        let rootFolderId = _rootFolder!.id
+        folders = folders.filter { $0.key == rootFolderId }
+
+        // Recursively discover subdirectories
+        discoverFoldersRecursively(at: rootURL, parentId: nil)
+
+        updateHierarchy()
+    }
+
+    /// Recursively discovers folders in a directory
+    private func discoverFoldersRecursively(at url: URL, parentId: UUID?) {
+        let fileManager = FileManager.default
+
+        do {
+            let contents = try fileManager.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            for itemURL in contents {
+                var isDirectory: ObjCBool = false
+                if fileManager.fileExists(atPath: itemURL.path, isDirectory: &isDirectory),
+                    isDirectory.boolValue
+                {
+
+                    // Create folder if it doesn't exist
+                    let folderName = itemURL.lastPathComponent
+                    let existingFolder = folders.values.first { folder in
+                        folder.path == itemURL.path
+                    }
+
+                    let folder: Folder
+                    if let existing = existingFolder {
+                        folder = existing
+                    } else {
+                        folder = Folder(
+                            name: folderName,
+                            path: itemURL.path,
+                            parentId: parentId
+                        )
+                        folders[folder.id] = folder
+                    }
+
+                    // Recursively discover subfolders
+                    discoverFoldersRecursively(at: itemURL, parentId: folder.id)
+                }
+            }
+        } catch {
+            // Silently skip directories that can't be read
         }
     }
 }

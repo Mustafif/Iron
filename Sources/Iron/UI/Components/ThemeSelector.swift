@@ -8,6 +8,7 @@
 import SwiftUI
 
 public struct ThemeSelector: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var themeManager: ThemeManager
     @State private var hoveredTheme: IronTheme?
     @State private var showingSettings = false
@@ -31,15 +32,27 @@ public struct ThemeSelector: View {
 
                 Spacer()
 
-                Button {
-                    showingSettings = true
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.title3)
-                        .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                HStack(spacing: 8) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.title3)
+                            .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Theme Settings")
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(themeManager.currentTheme.colors.foregroundSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close")
                 }
-                .buttonStyle(.plain)
-                .help("Theme Settings")
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)

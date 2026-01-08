@@ -192,6 +192,7 @@ struct DetailView: View {
                 scheduleAutoSave()
             }
         )
+        .environmentObject(ironApp)
         .environmentObject(themeManager)
         .background(themeManager.currentTheme.colors.background)
     }
@@ -435,13 +436,15 @@ struct DetailView: View {
 
         Task {
             do {
+                let folder = ironApp.folderManager.folder(for: note)
                 let duplicatedNote = try await ironApp.createNote(
                     title: "\(note.title) Copy",
-                    content: note.content
+                    content: note.content,
+                    in: folder
                 )
 
                 await MainActor.run {
-                    navigationModel.selectNote(duplicatedNote)
+                    navigationModel.selectNote(duplicatedNote, ironApp: ironApp)
                 }
             } catch {
                 navigationModel.showError(error)

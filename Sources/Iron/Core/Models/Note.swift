@@ -85,7 +85,7 @@ public struct Note: Identifiable, Codable, Hashable, Sendable {
 
     /// Returns all outgoing links found in the content
     public var outgoingLinks: Set<String> {
-        return LinkParser.extractLinks(from: content)
+        return NoteLinkParser.extractLinks(from: content)
     }
 
     /// Returns the note's word count
@@ -172,7 +172,7 @@ public enum RelationshipType: String, Codable, CaseIterable, Sendable {
 }
 
 /// Utility for parsing links from note content
-public struct LinkParser: Sendable {
+public struct NoteLinkParser: Sendable {
     /// Extracts wiki-style links from text content
     public static func extractLinks(from content: String) -> Set<String> {
         let pattern = #"\[\[([^\]]+)\]\]"#
@@ -226,7 +226,7 @@ extension Note {
         )
 
         // Extract tags from content
-        let extractedTags = LinkParser.extractTags(from: content)
+        let extractedTags = NoteLinkParser.extractTags(from: content)
         note.tags = extractedTags
 
         return note

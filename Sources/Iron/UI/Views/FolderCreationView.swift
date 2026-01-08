@@ -11,6 +11,7 @@ struct FolderCreationView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var ironApp: IronApp
     @EnvironmentObject var navigationModel: NavigationModel
+    @FocusState private var isTextFieldFocused: Bool
 
     @State private var folderName: String = ""
     @State private var selectedParentFolder: Folder?
@@ -27,138 +28,137 @@ struct FolderCreationView: View {
     }
 
     var body: some View {
-        NavigationView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "folder.badge.plus")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
+        VStack(alignment: .leading, spacing: 20) {
+            // Header
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
 
-                        Text("Create New Folder")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                    }
-
-                    Text("Organize your notes by creating a new folder")
-                        .font(.body)
-                        .foregroundColor(.secondary)
+                    Text("Create New Folder")
+                        .font(.title2)
+                        .fontWeight(.semibold)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
 
-                // Form
-                VStack(alignment: .leading, spacing: 16) {
-                    // Folder Name
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Folder Name")
-                            .font(.headline)
+                Text("Organize your notes by creating a new folder")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
 
-                        TextField("Enter folder name", text: $folderName)
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit {
-                                if canCreateFolder {
-                                    createFolder()
-                                }
-                            }
+            // Form
+            VStack(alignment: .leading, spacing: 16) {
+                // Folder Name
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Folder Name")
+                        .font(.headline)
 
-                        if folderName.isEmpty {
-                            Text("Folder name is required")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-
-                    // Parent Folder Selection
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Parent Folder")
-                            .font(.headline)
-
-                        Picker("Parent Folder", selection: $selectedParentFolder) {
-                            Text("Root (No Parent)")
-                                .tag(Optional<Folder>.none)
-
-                            ForEach(availableParentFolders, id: \.id) { folder in
-                                HStack {
-                                    Image(systemName: "folder")
-                                        .foregroundColor(.accentColor)
-                                    Text(folder.name)
-                                }
-                                .tag(Optional(folder))
+                    TextField("Enter folder name", text: $folderName)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($isTextFieldFocused)
+                        .onSubmit {
+                            if canCreateFolder {
+                                createFolder()
                             }
                         }
-                        .pickerStyle(.menu)
 
-                        if let parent = selectedParentFolder {
-                            Text("Will be created in: \(parent.name)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        } else {
-                            Text("Will be created in root directory")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-
-                    Divider()
-
-                    // Preview
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Preview")
-                            .font(.headline)
-
-                        HStack {
-                            Image(systemName: "folder")
-                                .foregroundColor(.accentColor)
-
-                            Text(folderName.isEmpty ? "New Folder" : folderName)
-                                .fontWeight(.medium)
-
-                            Spacer()
-                        }
-                        .padding(12)
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(8)
-
-                        Text("Full path: \(previewPath)")
+                    if folderName.isEmpty {
+                        Text("Folder name is required")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding(.horizontal, 20)
+
+                // Parent Folder Selection
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Parent Folder")
+                        .font(.headline)
+
+                    Picker("Parent Folder", selection: $selectedParentFolder) {
+                        Text("Root (No Parent)")
+                            .tag(Optional<Folder>.none)
+
+                        ForEach(availableParentFolders, id: \.id) { folder in
+                            HStack {
+                                Image(systemName: "folder")
+                                    .foregroundColor(.accentColor)
+                                Text(folder.name)
+                            }
+                            .tag(Optional(folder))
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    if let parent = selectedParentFolder {
+                        Text("Will be created in: \(parent.name)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Will be created in root directory")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Divider()
+
+                // Preview
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Preview")
+                        .font(.headline)
+
+                    HStack {
+                        Image(systemName: "folder")
+                            .foregroundColor(.accentColor)
+
+                        Text(folderName.isEmpty ? "New Folder" : folderName)
+                            .fontWeight(.medium)
+
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
+
+                    Text("Full path: \(previewPath)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal, 20)
+
+            Spacer()
+
+            // Buttons
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
 
                 Spacer()
 
-                // Buttons
-                HStack {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .keyboardShortcut(.cancelAction)
-
-                    Spacer()
-
-                    Button(action: createFolder) {
-                        HStack {
-                            if isCreating {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .scaleEffect(0.8)
-                            }
-                            Text("Create Folder")
+                Button(action: createFolder) {
+                    HStack {
+                        if isCreating {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.8)
                         }
+                        Text("Create Folder")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canCreateFolder || isCreating)
-                    .keyboardShortcut(.defaultAction)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                .buttonStyle(.borderedProminent)
+                .disabled(!canCreateFolder || isCreating)
+                .keyboardShortcut(.defaultAction)
             }
-            .frame(width: 400, height: 500)
-            .toolbar(.hidden)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
         }
+        .frame(minWidth: 400, idealWidth: 450, maxWidth: 500)
+        .frame(minHeight: 400, idealHeight: 450, maxHeight: 500)
         .alert("Error Creating Folder", isPresented: $showingError) {
             Button("OK") {
                 createError = nil
@@ -170,6 +170,7 @@ struct FolderCreationView: View {
         }
         .onAppear {
             selectedParentFolder = navigationModel.selectedFolder
+            isTextFieldFocused = true
         }
     }
 
@@ -232,7 +233,7 @@ struct FolderCreationView: View {
                     )
 
                     // Select the newly created folder
-                    navigationModel.selectFolder(newFolder)
+                    navigationModel.selectFolder(newFolder, ironApp: ironApp)
 
                     // Close the sheet
                     navigationModel.showingFolderCreation = false

@@ -124,7 +124,7 @@ struct NoteListView: View {
         List {
             ForEach(sortedNotes, id: \.id) { note in
                 Button(action: {
-                    navigationModel.selectNote(note)
+                    navigationModel.selectNote(note, ironApp: ironApp)
                 }) {
                     NoteListRowView(note: note)
                 }
@@ -150,7 +150,7 @@ struct NoteListView: View {
                 ForEach(sortedNotes, id: \.id) { note in
                     NoteGridItemView(note: note)
                         .onTapGesture {
-                            navigationModel.selectNote(note)
+                            navigationModel.selectNote(note, ironApp: ironApp)
                         }
                         .contextMenu {
                             noteContextMenu(for: note)
@@ -169,7 +169,7 @@ struct NoteListView: View {
                 SearchResultRowView(result: result)
                     .onTapGesture {
                         if let note = ironApp.loadNote(id: result.noteId) {
-                            navigationModel.selectNote(note)
+                            navigationModel.selectNote(note, ironApp: ironApp)
                         }
                     }
             }
@@ -206,7 +206,7 @@ struct NoteListView: View {
     private func noteContextMenu(for note: Note) -> some View {
         Group {
             Button("Open") {
-                navigationModel.selectNote(note)
+                navigationModel.selectNote(note, ironApp: ironApp)
             }
 
             Divider()

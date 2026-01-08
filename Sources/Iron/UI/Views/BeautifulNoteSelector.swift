@@ -12,7 +12,6 @@ public struct BeautifulNoteSelector: View {
     @EnvironmentObject var navigationModel: NavigationModel
     @EnvironmentObject var themeManager: ThemeManager
 
-    @State private var searchText = ""
     @State private var selectedSortOption: SortOption = .modified
     @State private var viewMode: NoteSelectorViewMode = .cards
     @State private var selectedCategories: Set<String> = []
@@ -30,7 +29,7 @@ public struct BeautifulNoteSelector: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Header with search and controls
+            // Header with controls
             headerSection
 
             Divider()
@@ -50,7 +49,7 @@ public struct BeautifulNoteSelector: View {
                                 NoteSelectorCard(
                                     note: note,
                                     isHovered: hoveredNoteId == note.id,
-                                    onTap: { navigationModel.selectNote(note) }
+                                    onTap: { navigationModel.selectNote(note, ironApp: ironApp) }
                                 )
                                 .environmentObject(themeManager)
                                 .onHover { isHovering in
@@ -60,7 +59,7 @@ public struct BeautifulNoteSelector: View {
                                 NoteSelectorCompactCard(
                                     note: note,
                                     isHovered: hoveredNoteId == note.id,
-                                    onTap: { navigationModel.selectNote(note) }
+                                    onTap: { navigationModel.selectNote(note, ironApp: ironApp) }
                                 )
                                 .environmentObject(themeManager)
                                 .onHover { isHovering in
@@ -90,27 +89,8 @@ public struct BeautifulNoteSelector: View {
 
     private var headerSection: some View {
         VStack(spacing: 16) {
-            // Search and view controls
+            // View controls
             HStack(spacing: 16) {
-                // Search bar
-                HStack(spacing: 12) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(themeManager.currentTheme.colors.foregroundTertiary)
-
-                    TextField("Search notes...", text: $searchText)
-                        .font(.system(size: 14))
-                        .foregroundColor(themeManager.currentTheme.colors.foreground)
-                        .textFieldStyle(.plain)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(themeManager.currentTheme.colors.backgroundSecondary)
-                        .stroke(themeManager.currentTheme.colors.border.opacity(0.3), lineWidth: 1)
-                )
-
                 // View mode toggle
                 HStack(spacing: 4) {
                     ForEach(NoteSelectorViewMode.allCases, id: \.self) { mode in
@@ -147,6 +127,8 @@ public struct BeautifulNoteSelector: View {
                         .fill(themeManager.currentTheme.colors.backgroundSecondary.opacity(0.5))
                         .stroke(themeManager.currentTheme.colors.border.opacity(0.2), lineWidth: 1)
                 )
+
+                Spacer()
             }
 
             // Sort and filter options
@@ -208,20 +190,21 @@ public struct BeautifulNoteSelector: View {
                     .frame(width: 80, height: 80)
 
                 Image(
-                    systemName: searchText.isEmpty ? "doc.text.magnifyingglass" : "magnifyingglass"
+                    systemName: navigationModel.searchText.isEmpty
+                        ? "doc.text.magnifyingglass" : "magnifyingglass"
                 )
                 .font(.system(size: 32, weight: .light))
                 .foregroundColor(themeManager.currentTheme.colors.accent.opacity(0.7))
             }
 
             VStack(spacing: 8) {
-                Text(searchText.isEmpty ? "No Notes Yet" : "No Results Found")
+                Text(navigationModel.searchText.isEmpty ? "No Notes Yet" : "No Results Found")
                     .font(.title2)
                     .fontWeight(.semibold)
                     .foregroundColor(themeManager.currentTheme.colors.foreground)
 
                 Text(
-                    searchText.isEmpty
+                    navigationModel.searchText.isEmpty
                         ? "Create your first note to get started"
                         : "Try adjusting your search terms"
                 )
@@ -230,7 +213,7 @@ public struct BeautifulNoteSelector: View {
                 .multilineTextAlignment(.center)
             }
 
-            if searchText.isEmpty {
+            if navigationModel.searchText.isEmpty {
                 Button {
                     navigationModel.showingNoteCreation = true
                 } label: {
@@ -274,11 +257,13 @@ public struct BeautifulNoteSelector: View {
         var notes = ironApp.notes
 
         // Filter by search text
-        if !searchText.isEmpty {
+        if !navigationModel.searchText.isEmpty {
             notes = notes.filter { note in
-                note.title.localizedCaseInsensitiveContains(searchText)
-                    || note.content.localizedCaseInsensitiveContains(searchText)
-                    || note.tags.contains { $0.localizedCaseInsensitiveContains(searchText) }
+                note.title.localizedCaseInsensitiveContains(navigationModel.searchText)
+                    || note.content.localizedCaseInsensitiveContains(navigationModel.searchText)
+                    || note.tags.contains {
+                        $0.localizedCaseInsensitiveContains(navigationModel.searchText)
+                    }
             }
         }
 

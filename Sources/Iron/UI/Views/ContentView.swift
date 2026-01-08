@@ -1,10 +1,4 @@
-//
-//  ContentView.swift
-//  Iron
-//
-//  Main content view for the Iron knowledge management application
-//
-
+import Combine
 import SwiftUI
 
 public struct ContentView: View {
@@ -15,12 +9,8 @@ public struct ContentView: View {
     public init() {}
 
     public var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $navigationModel.sidebarVisibility) {
             SidebarView()
-                .environmentObject(navigationModel)
-                .environmentObject(themeManager)
-        } content: {
-            BeautifulNoteSelector()
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
         } detail: {
@@ -46,41 +36,45 @@ public struct ContentView: View {
                 Text(error.localizedDescription)
             }
         }
-        .alert(
-            "Create Note", isPresented: $navigationModel.showingNoteCreation,
-            actions: {
-                TextField("Note title", text: $navigationModel.newNoteTitle)
-                Button("Create") {
-                    Task {
-                        do {
-                            let newNote = try await ironApp.createNote(
-                                title: navigationModel.newNoteTitle,
-                                content: "# \(navigationModel.newNoteTitle)\n\n")
-                            await MainActor.run {
-                                navigationModel.selectNote(newNote)
-                                navigationModel.newNoteTitle = ""
-                            }
-                        } catch {
-                            navigationModel.showError(error)
-                        }
-                    }
-                }
-                .disabled(
-                    navigationModel.newNoteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                        .isEmpty)
-                Button("Cancel", role: .cancel) {
-                    navigationModel.newNoteTitle = ""
-                }
-            },
-            message: {
-                Text("Enter a name for your new note")
-            }
-        )
+        .sheet(isPresented: $navigationModel.showingNoteCreation) {
+            NoteCreationSheet()
+                .environmentObject(ironApp)
+                .environmentObject(navigationModel)
+                .environmentObject(themeManager)
+        }
+
         .sheet(isPresented: $navigationModel.showingFolderCreation) {
             FolderCreationView()
                 .environmentObject(ironApp)
                 .environmentObject(navigationModel)
                 .environmentObject(themeManager)
+        }
+        .sheet(isPresented: $navigationModel.showingRenameNote) {
+            if let note = navigationModel.noteForAction {
+                RenameNoteDialog(note: note)
+                    .environmentObject(ironApp)
+                    .environmentObject(navigationModel)
+                    .environmentObject(themeManager)
+            }
+        }
+        .sheet(isPresented: $navigationModel.showingMoveNote) {
+            if let note = navigationModel.noteForAction {
+                MoveNoteDialog(note: note)
+                    .environmentObject(ironApp)
+                    .environmentObject(navigationModel)
+                    .environmentObject(themeManager)
+            }
+        }
+        .sheet(isPresented: $navigationModel.showingRenameFolder) {
+            if let folder = navigationModel.folderForAction {
+                RenameFolderDialog(folder: folder)
+                    .environmentObject(ironApp)
+                    .environmentObject(navigationModel)
+                    .environmentObject(themeManager)
+            }
+        }
+        .onChange(of: navigationModel.showingFolderCreation) { _, newValue in
+            print("ContentView: showingFolderCreation changed to: \(newValue)")
         }
     }
 
@@ -181,4 +175,5 @@ struct ContentView_Previews: PreviewProvider {
                 .previewDisplayName("Catppuccin Mocha")
         }
     }
+
 }

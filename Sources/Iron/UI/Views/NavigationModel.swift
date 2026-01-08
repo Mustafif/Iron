@@ -36,6 +36,9 @@ public class NavigationModel: ObservableObject {
     /// Whether the sidebar is visible
     @Published public var sidebarVisible: Bool = true
 
+    /// Sidebar visibility for NavigationSplitView
+    @Published public var sidebarVisibility: NavigationSplitViewVisibility = .all
+
     /// Whether the preview pane is visible
     @Published public var previewVisible: Bool = true
 
@@ -57,8 +60,28 @@ public class NavigationModel: ObservableObject {
     /// Whether to show settings
     @Published public var showingSettings: Bool = false
 
-    /// Whether to show graph view
-    @Published public var showingGraph: Bool = false
+    // MARK: - Rename/Move Dialog States
+
+    /// Whether to show rename note dialog
+    @Published public var showingRenameNote: Bool = false
+
+    /// Whether to show move note dialog
+    @Published public var showingMoveNote: Bool = false
+
+    /// Whether to show rename folder dialog
+    @Published public var showingRenameFolder: Bool = false
+
+    /// Note being renamed/moved
+    @Published public var noteForAction: Note?
+
+    /// Folder being renamed
+    @Published public var folderForAction: Folder?
+
+    /// Current working directory
+    @Published public var currentWorkingDirectory: URL?
+
+    /// Whether sidebar is in file tree mode
+    @Published public var isFileTreeMode: Bool = false
 
     /// Current navigation path for detail view
     @Published public var navigationPath = NavigationPath()
@@ -77,8 +100,9 @@ public class NavigationModel: ObservableObject {
     // MARK: - Public Methods
 
     /// Selects a note and navigates to it
-    public func selectNote(_ note: Note) {
+    public func selectNote(_ note: Note, ironApp: IronApp) {
         selectedNote = note
+        selectedFolder = ironApp.folderManager.folder(for: note)
 
         // Clear search when selecting a note
         if isSearching {
@@ -87,9 +111,17 @@ public class NavigationModel: ObservableObject {
     }
 
     /// Selects a folder
-    public func selectFolder(_ folder: Folder) {
+    public func selectFolder(_ folder: Folder, ironApp: IronApp? = nil) {
         selectedFolder = folder
         selectedNote = nil
+
+        // Update current working directory
+        currentWorkingDirectory = URL(fileURLWithPath: folder.path)
+
+        // Synchronize with FolderManager
+        if let ironApp = ironApp {
+            ironApp.folderManager.selectFolder(folder)
+        }
     }
 
     /// Starts a search with debouncing
@@ -127,6 +159,26 @@ public class NavigationModel: ObservableObject {
         showingError = true
     }
 
+    // MARK: - Rename/Move Actions
+
+    /// Show rename dialog for a note
+    public func showRenameDialog(for note: Note) {
+        noteForAction = note
+        showingRenameNote = true
+    }
+
+    /// Show move dialog for a note
+    public func showMoveDialog(for note: Note) {
+        noteForAction = note
+        showingMoveNote = true
+    }
+
+    /// Show rename dialog for a folder
+    public func showRenameDialog(for folder: Folder) {
+        folderForAction = folder
+        showingRenameFolder = true
+    }
+
     /// Creates a new note
     public func createNote(title: String, content: String = "", ironApp: IronApp) {
         showingNoteCreation = false
@@ -135,7 +187,7 @@ public class NavigationModel: ObservableObject {
             do {
                 let newNote = try await ironApp.createNote(title: title, content: content)
                 await MainActor.run {
-                    self.selectNote(newNote)
+                    self.selectNote(newNote, ironApp: ironApp)
                 }
             } catch {
                 await MainActor.run {
@@ -184,7 +236,7 @@ public class NavigationModel: ObservableObject {
                     )
 
                     // Select the newly created folder
-                    self.selectFolder(newFolder)
+                    self.selectFolder(newFolder, ironApp: ironApp)
                 }
             } catch {
                 await MainActor.run {
@@ -203,6 +255,7 @@ public class NavigationModel: ObservableObject {
     public func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.2)) {
             sidebarVisible.toggle()
+            sidebarVisibility = sidebarVisible ? .all : .detailOnly
         }
     }
 
@@ -213,9 +266,45 @@ public class NavigationModel: ObservableObject {
         }
     }
 
-    /// Shows the graph view
-    public func showGraph() {
-        showingGraph = true
+    /// Toggles file tree mode
+    public func toggleFileTreeMode() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isFileTreeMode.toggle()
+        }
+    }
+
+    /// Sets the current working directory
+    public func setWorkingDirectory(_ directory: URL) {
+        currentWorkingDirectory = directory
+    }
+
+    /// Creates a note in the current working directory
+    public func createNoteInWorkingDirectory(title: String, content: String = "", ironApp: IronApp)
+    {
+        Task {
+            do {
+                let targetFolder: Folder
+                if let selectedFolder = selectedFolder {
+                    targetFolder = selectedFolder
+                } else {
+                    targetFolder = ironApp.folderManager.rootFolder
+                }
+
+                let newNote = try await ironApp.createNote(
+                    title: title,
+                    content: content.isEmpty ? "# \(title)\n\n" : content,
+                    in: targetFolder
+                )
+
+                await MainActor.run {
+                    self.selectNote(newNote, ironApp: ironApp)
+                }
+            } catch {
+                await MainActor.run {
+                    self.showError(error)
+                }
+            }
+        }
     }
 
     /// Navigates to a specific view
@@ -297,7 +386,6 @@ public enum NavigationDestination: Hashable, Sendable {
     case folder(UUID)
     case search(String)
     case settings
-    case graph
     case newNote
     case newFolder
 
@@ -307,7 +395,6 @@ public enum NavigationDestination: Hashable, Sendable {
         case .folder: return "Folder"
         case .search: return "Search"
         case .settings: return "Settings"
-        case .graph: return "Graph"
         case .newNote: return "New Note"
         case .newFolder: return "New Folder"
         }
@@ -327,6 +414,17 @@ extension NavigationModel {
             return "Search: \(searchText)"
         } else {
             return "Iron"
+        }
+    }
+
+    /// Gets the current working directory display name
+    public var workingDirectoryName: String {
+        if let directory = currentWorkingDirectory {
+            return directory.lastPathComponent
+        } else if let folder = selectedFolder {
+            return folder.name
+        } else {
+            return "Notes"
         }
     }
 

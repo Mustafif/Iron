@@ -17,6 +17,8 @@ public struct NativeSplitEditor: View {
     @State private var isPreviewVisible = true
     @State private var splitRatio: CGFloat = 0.5
     @State private var isDraggingSplitter = false
+    @State private var showingNotePicker = false
+    @EnvironmentObject var ironApp: IronApp
 
     public init(
         text: Binding<String>,
@@ -77,6 +79,14 @@ public struct NativeSplitEditor: View {
             }
         }
         .background(themeManager.currentTheme.colors.background)
+        .sheet(isPresented: $showingNotePicker) {
+            NotePickerView(onNoteSelected: { note in
+                insertText("[[\(note.title)]]")
+                showingNotePicker = false
+            })
+            .environmentObject(ironApp)
+            .environmentObject(themeManager)
+        }
     }
 
     private var editorToolbar: some View {
@@ -103,6 +113,10 @@ public struct NativeSplitEditor: View {
 
             NativeFormatButton(icon: "code", tooltip: "Inline Code") {
                 insertWrapping(prefix: "`", suffix: "`")
+            }
+
+            NativeFormatButton(icon: "link", tooltip: "Link to Note") {
+                showingNotePicker = true
             }
 
             NativeFormatButton(icon: "number", tooltip: "Header") {
